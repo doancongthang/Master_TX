@@ -5,7 +5,6 @@
 
 // Firmware FOR BOARD 16IN_16OUT
 // Using Uart2 for RS_485
-#define REGN 10
 //#define SLAVE_ID 1
 // Chỉnh sửa cho đúng với board
 int input[] = {A8, A9, A10, A11, A12, A13, A14, A15,
@@ -46,10 +45,14 @@ int output[] = {37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22};
 #pragma endregion
 long ModbusBaurate;
 ModbusRTU mb;
+bool cbWrite(Modbus::ResultCode event, uint16_t transactionId, void *data)
+{
+    Serial.print("Request result: 0x");
+    Serial.print(event, HEX);
+    return true;
+}
 void setup()
 {
-    // initialize serial
-    Serial.begin(9600);
 #pragma region Pinmode
     pinMode(BT1UP, INPUT_PULLUP);
     pinMode(BT1DOWN, INPUT_PULLUP);
@@ -80,42 +83,46 @@ void setup()
     {
         pinMode(output[i], OUTPUT);
     }
-
-    Serial2.begin(ModbusBaurate, SERIAL_8N1);
-    mb.master();
-    mb.begin(&Serial2);
-    mb.setBaudrate(ModbusBaurate);
+    Serial.begin(9600, SERIAL_8N1);
+    mb.begin(&Serial);
+    mb.setBaudrate(9600);
 
     mb.addCoil(0, 0, 16); //  Thêm 100 Coils
     mb.addHreg(0, 0, 16); //  Thêm thanh ghi hoding register với địa chỉ bắt đầu = 0 và độ dài thanh ghi =100
     mb.addIsts(0, 0, 16); //  Thêm thanh ghi discrete với địa chỉ bắt đầu = 0, giá trị set ban đầu = false và độ dài thanh ghi = 100
     mb.addIreg(0, 0, 16); //  Thêm thanh ghi discrete với địa chỉ bắt đầu = 0, giá trị set ban đầu = false và độ dài thanh ghi = 100
                           //  mb.Ireg(0,1992);      //  Dùng cho xác thực board từ PLC
+    /*----------------------------------------------------------------*/
+    mb.master();
 }
-/*----------------------------------------------------------------*/
 
+bool coils[20];
 void loop()
 {
-    //Đọc giá trị Analog từ biến trở
-    // Từ 10 đến 100%
-    int value = analogRead(A0);
-    value = map(value, 0, 1023, 10, 100);
-    // Save Value to HoldingRes
-    if ((digitalRead(BT1UP) == HIGH) && (digitalRead(BT1DOWN) == LOW) && value != 0)
+    if (!mb.slave())
     {
-        // Up
-        mb.Hreg(1, value);
-    }
-    if ((digitalRead(BT1UP) == LOW) && (digitalRead(BT1DOWN) == HIGH) && value != 0)
-    {
-        // Down
-        mb.Hreg(2, value);
-    }
-    if ((digitalRead(BT1UP) == LOW) && (digitalRead(BT1DOWN) == LOW) && value != 0)
-    {
-        // Stop
-        mb.Hreg(0, 0);
-        mb.Hreg(1, 0);
+        mb.readCoil(1, 1, coils, 20, cbWrite);
+        //Đọc giá trị Analog từ biến trở
+        // Từ 10 đến 100%
+        int value = analogRead(A0);
+        value = map(value, 0, 1023, 10, 100);
+        // Save Value to HoldingRes
+        if ((digitalRead(BT1UP) == HIGH) && (digitalRead(BT1DOWN) == LOW) && value != 0)
+        {
+            // Up
+            mb.Hreg(1, value);
+        }
+        if ((digitalRead(BT1UP) == LOW) && (digitalRead(BT1DOWN) == HIGH) && value != 0)
+        {
+            // Down
+            mb.Hreg(2, value);
+        }
+        if ((digitalRead(BT1UP) == LOW) && (digitalRead(BT1DOWN) == LOW) && value != 0)
+        {
+            // Stop
+            mb.Hreg(0, 0);
+            mb.Hreg(1, 0);
+        }
     }
     mb.task();
     yield();
